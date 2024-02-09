@@ -21,6 +21,14 @@ def get_export_args(parser):
         action=ExpandFullPath,
     )
     parser.add_argument(
+        '-a',
+        '--alt_imgs_dir',
+        dest='alt_imgs_dir',
+        required=False,
+        help='Alternative Directory containing images',
+        action=ExpandFullPath,
+    )
+    parser.add_argument(
         '-c',
         '--config',
         dest='config',
@@ -165,6 +173,7 @@ def imports(args):
             out_type=args.out_type,
             image_root_url=args.image_root_url,
             image_ext=args.image_ext,
+            alt_imgs_dir=args.alt_imgs_dir
         )
 
     elif args.import_format == 'coco':
