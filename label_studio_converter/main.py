@@ -21,14 +21,6 @@ def get_export_args(parser):
         action=ExpandFullPath,
     )
     parser.add_argument(
-        '-a',
-        '--alt_imgs_dir',
-        dest='alt_imgs_dir',
-        required=False,
-        help='Alternative Directory containing images',
-        action=ExpandFullPath,
-    )
-    parser.add_argument(
         '-c',
         '--config',
         dest='config',
@@ -107,7 +99,9 @@ def get_all_args():
     import_yolo.add_parser(import_format)
     import_coco.add_parser(import_format)
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    print( vars(args) )
+    return args
 
 
 def export(args):
@@ -168,12 +162,12 @@ def imports(args):
         import_yolo.convert_yolo_to_ls(
             input_dir=args.input,
             out_file=args.output,
+            alt_imgs_dir=args.alt_imgs_dir,
             to_name=args.to_name,
             from_name=args.from_name,
             out_type=args.out_type,
             image_root_url=args.image_root_url,
             image_ext=args.image_ext,
-            alt_imgs_dir=args.alt_imgs_dir
         )
 
     elif args.import_format == 'coco':
