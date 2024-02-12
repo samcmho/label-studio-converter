@@ -109,7 +109,8 @@ def convert_yolo_to_ls(
                 + str(pathname2url(image_filename)) if not has_alt_imgs_dir else 
                                 image_root_url 
                                 + relative_root + '/'
-                                + str(pathname2url(image_filename))
+                                + str(pathname2url(image_filename)),
+                    "storage_filename": image_filename
                 }
             }
 
