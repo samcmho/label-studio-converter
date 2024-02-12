@@ -38,6 +38,7 @@ def convert_yolo_to_ls(
     image_root_url='/data/local-files/?d=',
     image_ext='.jpg,.jpeg,.png',
     image_dims: Optional[Tuple[int, int]] = None,
+    DJI=True,
 ):
     """Convert YOLO labeling to Label Studio JSON
     :param input_dir: directory with YOLO where images, labels, notes.json are located
@@ -51,6 +52,7 @@ def convert_yolo_to_ls(
     :param image_dims: image dimensions - optional tuple of integers specifying the image width and height of *all* images in the dataset. Defaults to opening the image to determine it's width and height, which is slower. This should only be used in the special case where you dataset has uniform image dimesions.
     """
 
+    is_DJI = DJI
     has_alt_imgs_dir = alt_imgs_dir is not None
     validate_alternative_image_path(alt_imgs_dir)
     
@@ -113,6 +115,12 @@ def convert_yolo_to_ls(
                     "storage_filename": image_filename
                 }
             }
+            if is_DJI:
+                property, paddock, flight = relative_root_pth.parts[-3:]
+                flight = flight[-3:]
+                task['data']['property'] = property
+                task['data']['paddock'] = paddock
+                task['data']['flight'] = flight
 
             # define coresponding label file and check existence
             label_file = os.path.join(labels_dir, image_file_base + '.txt') if not has_alt_imgs_dir else os.path.join(root.replace(images_dir,labels_dir), 'labels', image_file_base + '.txt')
