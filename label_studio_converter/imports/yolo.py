@@ -115,11 +115,9 @@ def convert_yolo_to_ls(
 
             # define coresponding label file and check existence
             label_file = os.path.join(labels_dir, image_file_base + '.txt') if not has_alt_imgs_dir else os.path.join(root.replace(images_dir,labels_dir), 'labels', image_file_base + '.txt')
-            print(f'label file is {label_file}')
+            # print(f'label file is {label_file}')
 
-            if not os.path.exists(label_file):
-                logger.info(f'no label found at {label_file}')
-            else:
+            if os.path.exists(label_file):
                 task[out_type] = [
                     {
                         "result": [],
@@ -140,13 +138,15 @@ def convert_yolo_to_ls(
                     # convert all bounding boxes to Label Studio Results
                     lines = file.readlines()
                     for line in lines:
-                        label_id, x, y, width, height = line.split()
+                        label_id, x, y, width, height = line.split()[:5]
+                        conf = line.split()[-1] if out_type == 'predictions' else None
                         x, y, width, height = (
                             float(x),
                             float(y),
                             float(width),
                             float(height),
                         )
+                        conf = float(conf) if conf is not None else None
                         item = {
                             "id": uuid.uuid4().hex[0:10],
                             "type": "rectanglelabels",
@@ -164,6 +164,8 @@ def convert_yolo_to_ls(
                             "original_width": image_width,
                             "original_height": image_height,
                         }
+                        if out_type == 'predictions':
+                            item["score"] = conf
                         task[out_type][0]['result'].append(item)
 
             tasks.append(task)
