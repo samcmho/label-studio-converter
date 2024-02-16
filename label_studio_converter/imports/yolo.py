@@ -1,5 +1,7 @@
 import os
 import json  # better to use "imports ujson as json" for the best performance
+import pandas as pd
+from tqdm import tqdm
 
 import uuid
 import logging
@@ -14,6 +16,8 @@ from urllib.request import (
 from label_studio_converter.utils import ExpandFullPath
 from label_studio_converter.utils import LOCAL_FILES_DOCUMENT_ROOT
 from label_studio_converter.imports.label_config import generate_label_config
+
+PICKLES = Path(r'F:\AI\SKW\DroneSurveillance\detection_dvc\detect\scores')
 
 logger = logging.getLogger('root')
 
@@ -87,97 +91,118 @@ def convert_yolo_to_ls(
     image_ext = [x.strip() for x in image_ext.split(",")]
     logger.info(f'image extensions->, {image_ext}')
 
+    img_count = sum(len([file for file in files if file.endswith('.JPG')]) for _, _, files in os.walk(images_dir))  # Get the number of files
+
+    with tqdm(total=img_count) as pbar:
     # loop through images
-    for root, dirs, files in os.walk(images_dir):
-        for f in files:
-            image_file_found_flag = False
-            for ext in image_ext:
-                if f.endswith(ext):
-                    image_filename = f
-                    image_file_base = f[0 : -len(ext)]
-                    image_file_found_flag = True
-                    break
-            if not image_file_found_flag:
-                continue
+        for root, dirs, files in os.walk(images_dir):
+            if is_DJI and len(files):
+                property = Path(alt_imgs_dir).stem
+                for pickle_fn in [f for f in os.listdir(PICKLES) if f.endswith('.pkl')]:
+                    if property in pickle_fn and 'all' in pickle_fn:
+                        property_pickle_fn = pickle_fn
+                        break
+                df = pd.read_pickle(PICKLES / property_pickle_fn)
+                df.set_index(['Paddock','FlightID','droneID'], inplace=True)
+                df_idx = df.index
+                # logger.info(f'loaded {property_pickle_fn} with {df.shape[0]} records. Query it by {df.index}')
+                
+            for f in files:
+                pbar.update(1)
+                image_file_found_flag = False
+                for ext in image_ext:
+                    if f.endswith(ext):
+                        image_filename = f
+                        image_file_base = f[0 : -len(ext)]
+                        image_file_found_flag = True
+                        break
+                if not image_file_found_flag:
+                    continue
 
-            if has_alt_imgs_dir:
-                relative_root_pth = Path(root).relative_to(Path(LOCAL_FILES_DOCUMENT_ROOT))
-                relative_root = '/'.join(relative_root_pth.parts)
-            image_root_url += '' if image_root_url.endswith('/') else '/'
-            task = {
-                "data": {
-                    # eg. '../../foo+you.py' -> '../../foo%2Byou.py'
-                    "image":    image_root_url
-                + str(pathname2url(image_filename)) if not has_alt_imgs_dir else 
-                                image_root_url 
-                                + relative_root + '/'
-                                + str(pathname2url(image_filename)),
-                    "storage_filename": image_filename
-                }
-            }
-            if is_DJI:
-                property, paddock, flight = relative_root_pth.parts[-3:]
-                flight = flight[-3:]
-                task['data']['property'] = property
-                task['data']['paddock'] = paddock
-                task['data']['flight'] = flight
-
-            # define coresponding label file and check existence
-            label_file = os.path.join(labels_dir, image_file_base + '.txt') if not has_alt_imgs_dir else os.path.join(root.replace(images_dir,labels_dir), 'labels', image_file_base + '.txt')
-            # print(f'label file is {label_file}')
-
-            if os.path.exists(label_file):
-                task[out_type] = [
-                    {
-                        "result": [],
-                        "ground_truth": False,
+                if has_alt_imgs_dir:
+                    relative_root_pth = Path(root).relative_to(Path(LOCAL_FILES_DOCUMENT_ROOT))
+                    relative_root = '/'.join(relative_root_pth.parts)
+                image_root_url += '' if image_root_url.endswith('/') else '/'
+                task = {
+                    "data": {
+                        # eg. '../../foo+you.py' -> '../../foo%2Byou.py'
+                        "image":    image_root_url
+                    + str(pathname2url(image_filename)) if not has_alt_imgs_dir else 
+                                    image_root_url 
+                                    + relative_root + '/'
+                                    + str(pathname2url(image_filename)),
+                        "storage_filename": image_filename
                     }
-                ]
+                }
+                if is_DJI:
+                    property, paddock, flight = relative_root_pth.parts[-3:]
+                    flight = flight[-3:]
+                    img_id = int(Path(image_filename).stem[-4:])
+                    task['data']['property'] = property
+                    task['data']['paddock'] = paddock
+                    task['data']['flight'] = flight
+                    pic_midx = (paddock,flight,img_id)
+                    # Detection data
+                    if pic_midx in df_idx:
+                        pic_df = df.loc[pic_midx]
+                        task['data']['max'] = pic_df['c'].max()
 
-                # read image sizes
-                if image_dims is None:
-                    # default to opening file if we aren't given image dims. slow!
-                    image_path = os.path.join(images_dir, relative_root, image_filename) if not has_alt_imgs_dir else os.path.join(root, image_filename)
-                    with Image.open(image_path) as im:
-                        image_width, image_height = im.size
-                else:
-                    image_width, image_height = image_dims
+                # define coresponding label file and check existence
+                label_file = os.path.join(labels_dir, image_file_base + '.txt') if not has_alt_imgs_dir else os.path.join(root.replace(images_dir,labels_dir), 'labels', image_file_base + '.txt')
+                # print(f'label file is {label_file}')
 
-                with open(label_file) as file:
-                    # convert all bounding boxes to Label Studio Results
-                    lines = file.readlines()
-                    for line in lines:
-                        label_id, x, y, width, height = line.split()[:5]
-                        conf = line.split()[-1] if out_type == 'predictions' else None
-                        x, y, width, height = (
-                            float(x),
-                            float(y),
-                            float(width),
-                            float(height),
-                        )
-                        conf = float(conf) if conf is not None else None
-                        item = {
-                            "id": uuid.uuid4().hex[0:10],
-                            "type": "rectanglelabels",
-                            "value": {
-                                "x": (x - width / 2) * 100,
-                                "y": (y - height / 2) * 100,
-                                "width": width * 100,
-                                "height": height * 100,
-                                "rotation": 0,
-                                "rectanglelabels": [categories[int(label_id)]],
-                            },
-                            "to_name": to_name,
-                            "from_name": from_name,
-                            "image_rotation": 0,
-                            "original_width": image_width,
-                            "original_height": image_height,
+                if os.path.exists(label_file):
+                    task[out_type] = [
+                        {
+                            "result": [],
+                            "ground_truth": False,
                         }
-                        if out_type == 'predictions':
-                            item["score"] = conf
-                        task[out_type][0]['result'].append(item)
+                    ]
 
-            tasks.append(task)
+                    # read image sizes
+                    if image_dims is None:
+                        # default to opening file if we aren't given image dims. slow!
+                        image_path = os.path.join(images_dir, relative_root, image_filename) if not has_alt_imgs_dir else os.path.join(root, image_filename)
+                        with Image.open(image_path) as im:
+                            image_width, image_height = im.size
+                    else:
+                        image_width, image_height = image_dims
+
+                    with open(label_file) as file:
+                        # convert all bounding boxes to Label Studio Results
+                        lines = file.readlines()
+                        for line in lines:
+                            label_id, x, y, width, height = line.split()[:5]
+                            conf = line.split()[-1] if out_type == 'predictions' else None
+                            x, y, width, height = (
+                                float(x),
+                                float(y),
+                                float(width),
+                                float(height),
+                            )
+                            conf = float(conf) if conf is not None else None
+                            item = {
+                                "id": uuid.uuid4().hex[0:10],
+                                "type": "rectanglelabels",
+                                "value": {
+                                    "x": (x - width / 2) * 100,
+                                    "y": (y - height / 2) * 100,
+                                    "width": width * 100,
+                                    "height": height * 100,
+                                    "rotation": 0,
+                                    "rectanglelabels": [categories[int(label_id)]],
+                                },
+                                "to_name": to_name,
+                                "from_name": from_name,
+                                "image_rotation": 0,
+                                "original_width": image_width,
+                                "original_height": image_height,
+                            }
+                            if out_type == 'predictions':
+                                item["score"] = conf
+                            task[out_type][0]['result'].append(item)
+
+                tasks.append(task)
 
     if len(tasks) > 0:
         logger.info('Saving Label Studio JSON to %s', out_file)
