@@ -99,7 +99,7 @@ def convert_yolo_to_ls(
             if is_DJI and len(files):
                 property = Path(alt_imgs_dir).stem
                 for pickle_fn in [f for f in os.listdir(PICKLES) if f.endswith('.pkl')]:
-                    if property in pickle_fn and 'all' in pickle_fn:
+                    if property in pickle_fn and 'top' not in pickle_fn:
                         property_pickle_fn = pickle_fn
                         break
                 df = pd.read_pickle(PICKLES / property_pickle_fn)
@@ -137,7 +137,10 @@ def convert_yolo_to_ls(
                 if is_DJI:
                     property, paddock, flight = relative_root_pth.parts[-3:]
                     flight = flight[-3:]
-                    img_id = int(Path(image_filename).stem[-4:])
+                    try:
+                        img_id = int(Path(image_filename).stem.split('_')[2])
+                    except:
+                        print(f'img filename: {image_filename}')
                     task['data']['property'] = property
                     task['data']['paddock'] = paddock
                     task['data']['flight'] = flight
