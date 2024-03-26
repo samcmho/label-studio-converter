@@ -103,7 +103,10 @@ def convert_yolo_to_ls(
                         property_pickle_fn = pickle_fn
                         break
                 df = pd.read_pickle(PICKLES / property_pickle_fn)
-                df.set_index(['Paddock','FlightID','droneID'], inplace=True)
+                logger.info(f'Loading pickled DF {property_pickle_fn}')
+                index_names = ['Paddock','FlightID','droneID']
+                if df.index.names != index_names:
+                    df.set_index(index_names, inplace=True)
                 df_idx = df.index
                 # logger.info(f'loaded {property_pickle_fn} with {df.shape[0]} records. Query it by {df.index}')
                 
@@ -148,7 +151,10 @@ def convert_yolo_to_ls(
                     # Detection data
                     if pic_midx in df_idx:
                         pic_df = df.loc[pic_midx]
-                        task['data']['max'] = pic_df['c'].max()
+                        # task['data']['max'] = pic_df['c'].max() # if loading all dets
+                        task['data']['max'] = pic_df['max'] # if loading summary per pic
+                        # task['data']['max'] = pic_df['mean'] # if loading summary per pic
+                        # task['data']['max'] = pic_df['count'] # if loading summary per pic
 
                 # define coresponding label file and check existence
                 label_file = os.path.join(labels_dir, image_file_base + '.txt') if not has_alt_imgs_dir else os.path.join(root.replace(images_dir,labels_dir), 'labels', image_file_base + '.txt')
