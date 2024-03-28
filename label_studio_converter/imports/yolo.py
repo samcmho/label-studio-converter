@@ -17,7 +17,7 @@ from label_studio_converter.utils import ExpandFullPath
 from label_studio_converter.utils import LOCAL_FILES_DOCUMENT_ROOT
 from label_studio_converter.imports.label_config import generate_label_config
 
-PICKLES = Path(r'F:\AI\SKW\DroneSurveillance\detection_dvc\detect\scores')
+SKW_PICKLES = Path(os.environ['SKW_PICKLES']) if 'SKW_PICKLES' in os.environ else Path(r'F:\AI\SKW\DroneSurveillance\detection_dvc\detect\scores')
 
 logger = logging.getLogger('root')
 
@@ -98,17 +98,17 @@ def convert_yolo_to_ls(
         for root, dirs, files in os.walk(images_dir):
             if is_DJI and len(files):
                 property = Path(alt_imgs_dir).stem
-                for pickle_fn in [f for f in os.listdir(PICKLES) if f.endswith('.pkl')]:
+                for pickle_fn in [f for f in os.listdir(SKW_PICKLES) if f.endswith('.pkl')]:
                     if property in pickle_fn and 'top' not in pickle_fn:
                         property_pickle_fn = pickle_fn
                         break
-                df = pd.read_pickle(PICKLES / property_pickle_fn)
+                df = pd.read_pickle(SKW_PICKLES / property_pickle_fn)
                 logger.info(f'Loading pickled DF {property_pickle_fn}')
                 index_names = ['Paddock','FlightID','droneID']
                 if df.index.names != index_names:
                     df.set_index(index_names, inplace=True)
                 df_idx = df.index
-                # logger.info(f'loaded {property_pickle_fn} with {df.shape[0]} records. Query it by {df.index}')
+                logger.info(f'loaded {property_pickle_fn} with {df.shape[0]} records. Query it by {df.index.names}. e.g. {df.index[0]}')
                 
             for f in files:
                 pbar.update(1)
@@ -138,8 +138,11 @@ def convert_yolo_to_ls(
                     }
                 }
                 if is_DJI:
-                    property, paddock, flight = relative_root_pth.parts[-3:]
-                    flight = flight[-3:]
+                    if len(relative_root_pth.parts) <3:
+                        property, paddock, flight, *_ = list(relative_root_pth.parts) + [None,None]
+                    else:
+                        property, paddock, flight = relative_root_pth.parts[-3:]
+                        flight = flight[-3:]
                     try:
                         img_id = int(Path(image_filename).stem.split('_')[2])
                     except:
@@ -148,8 +151,13 @@ def convert_yolo_to_ls(
                     task['data']['paddock'] = paddock
                     task['data']['flight'] = flight
                     pic_midx = (paddock,flight,img_id)
-                    # Detection data
-                    if pic_midx in df_idx:
+                    # logger.info(f'looking for {pic_midx} in {df_idx}')
+                    if (paddock is None or flight is None) and img_id in df_idx.unique(level='droneID'):
+                        # logger.info(f'looking for [:,:,{img_id}] in {df_idx}')
+                        pic_df = df.loc[:,:,img_id]
+                        # logger.info(f'found {pic_df}')
+                        task['data']['max'] = pic_df['max'].tolist()[0] # if loading summary per pic
+                    elif pic_midx in df_idx:# Detection data
                         pic_df = df.loc[pic_midx]
                         # task['data']['max'] = pic_df['c'].max() # if loading all dets
                         task['data']['max'] = pic_df['max'] # if loading summary per pic
