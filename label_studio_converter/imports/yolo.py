@@ -20,7 +20,7 @@ logger = logging.getLogger('root')
 def get_data(input_dir, img_exts):
     get_labels = lambda files: list( filter(lambda fn: fn.endswith('.txt') and 'classes.txt' not in fn, files if type(files)==list else os.listdir(files)) )
     get_images = lambda files: list( filter(lambda fn: any([fn.endswith(img_ext) for img_ext in img_exts]), files if type(files)==list else os.listdir(files)) )
-    images, labels = dict(), dict()
+    image_paths, label_paths = dict(), dict()
     image_labels = {}
     for dir_pth, dir_names, files in os.walk(input_dir):
         if Path(dir_pth) == Path(input_dir):
@@ -28,17 +28,20 @@ def get_data(input_dir, img_exts):
         dir_imgs, dir_lbls = get_images( files ), get_labels( files )
         if len(dir_imgs) > 0:
             for img in dir_imgs:
-                images[Path(img).stem] = (f'{dir_pth}/{img}')
+                image_paths[Path(img).stem] = (f'{dir_pth}/{img}')
 
         if len(dir_lbls) > 0:
             for lbl in dir_lbls:
-                labels[Path(lbl).stem] = (f'{dir_pth}/{lbl}')
+                label_paths[Path(lbl).stem] = (f'{dir_pth}/{lbl}')
 
-    for fn, image in images.items():
-        if fn in labels:
-            image_labels[image] = labels[fn]
-            
-    return list(images.values()), list(labels.values()), image_labels
+    images, labels = [], []
+    all_fns = set(image_paths.keys()).intersection(set(label_paths.keys()))
+    for fn in all_fns:
+        image_labels[image_paths[fn]] = label_paths[fn]
+        images.append(image_paths[fn])
+        labels.append(label_paths[fn])
+
+    return images, labels, image_labels
 
 def convert_yolo_to_ls(
     input_dir,
