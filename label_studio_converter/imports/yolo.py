@@ -37,7 +37,8 @@ def get_data(input_dir, img_exts):
     for fn, image in images.items():
         if fn in labels:
             image_labels[image] = labels[fn]
-    return images, labels, image_labels
+            
+    return list(images.values()), list(labels.values()), image_labels
 
 def convert_yolo_to_ls(
     input_dir,
