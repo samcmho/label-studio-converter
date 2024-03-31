@@ -18,21 +18,25 @@ from label_studio_converter.imports.label_config import generate_label_config
 logger = logging.getLogger('root')
 
 def get_data(input_dir, img_exts):
-    get_labels = lambda files: list( filter(lambda fn: fn.endswith('.txt') and 'classes.txt' not in fn, files if type(files)==list else os.listdir(files)) )  
-    get_images = lambda files: list( filter(lambda fn: any([fn.endswith(img_ext) for img_ext in img_exts]), files if type(files)==list else os.listdir(files)) )  
-    images, labels = [], []
+    get_labels = lambda files: list( filter(lambda fn: fn.endswith('.txt') and 'classes.txt' not in fn, files if type(files)==list else os.listdir(files)) )
+    get_images = lambda files: list( filter(lambda fn: any([fn.endswith(img_ext) for img_ext in img_exts]), files if type(files)==list else os.listdir(files)) )
+    images, labels = dict(), dict()
     image_labels = {}
     for dir_pth, dir_names, files in os.walk(input_dir):
         if Path(dir_pth) == Path(input_dir):
             continue         # skip input_dir. data should be at least one level in from input_dir
         dir_imgs, dir_lbls = get_images( files ), get_labels( files )
         if len(dir_imgs) > 0:
-            [images.append(f'{dir_pth}/{img}') for img in dir_imgs]
+            for img in dir_imgs:
+                images[Path(img).stem] = (f'{dir_pth}/{img}')
+
         if len(dir_lbls) > 0:
-            [labels.append(f'{dir_pth}/{lbl}') for lbl in dir_lbls]
-    for image, label in zip(images, labels):
-        if Path(image).stem == Path(label).stem:
-            image_labels[image] = label
+            for lbl in dir_lbls:
+                labels[Path(lbl).stem] = (f'{dir_pth}/{lbl}')
+
+    for fn, image in images.items():
+        if fn in labels:
+            image_labels[image] = labels[fn]
     return images, labels, image_labels
 
 def convert_yolo_to_ls(
